@@ -10,7 +10,7 @@ const argv = yargs.argv;
 const generateCoordinates = () => {
   return {
     lat: (Math.floor(Math.random() * (5200 - 4400 + 1)) + 4400) / 100,
-    long: (Math.floor(Math.random() * (4000 - 2200 + 1)) + 2200) / 100,
+    lng: (Math.floor(Math.random() * (4000 - 2200 + 1)) + 2200) / 100,
   }
 }
 
