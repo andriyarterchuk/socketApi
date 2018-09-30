@@ -1,5 +1,5 @@
 const express = require('express');
-const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
+const { Worker, isMainThread } = require('worker_threads');
 const app = express();
 const server = app.listen(3000, function () {
   console.log('listening on *:3000');
@@ -49,7 +49,7 @@ const asyncIterable = {
 async function main() {
   for await (const value of asyncIterable) {
     const { lat, lng } = value;
-    initialCoords[index - 1] = { lat: +(lat + 0.1).toFixed(2), lng };
+    initialCoords[index - 1] = { lat: +(lat + 0.01).toFixed(2), lng };
   }
   index = 0
 }
@@ -59,23 +59,33 @@ async function sendByAsyncIterator(socket) {
   socket.emit('coordinates', initialCoords);
 }
 
-// if (isMainThread) {
-//   const result = [];
-//   createGroupedArray(initialCoords, initialCoords.length / 4).map(arrayPart => {
-//     let w = new Worker(__filename, { workerData: arrayPart });
-//     w.on('message', msg => {
-//       result.push(...msg)
-//     })
-//     w.on('error', (e) => console.error('ee', e));
-//     w.on('exit', (code) => {
-//       if (code != 0)
-//         console.error(new Error(`Worker stopped with exit code ${code}`))
-//     });
-//   });
-// } else {
-//   const result = workerData.map(item => ({ lat: +(item.lat + 0.1).toFixed(2), lng: item.lng }));
-//   parentPort.postMessage(result);
-// }
+const generateCoordsByWorker = () => {
+  return new Promise(function (resolve, reject) {
+    if (isMainThread) {
+      const result = [];
+      createGroupedArray(initialCoords, initialCoords.length / 4).map(arrayPart => {
+        let w = new Worker(__dirname + '/worker.js', { workerData: arrayPart });
+        w.on('message', msg => {
+          result.push(...msg)
+          if (result.length === initialCoords.length) {
+            initialCoords = result;
+            return resolve();
+          }
+        })
+        w.on('error', (e) => console.error('e', e));
+        w.on('exit', (code) => {
+          if (code != 0)
+            console.error(new Error(`Worker stopped with exit code ${code}`))
+        });
+      });
+    }
+  })
+}
+
+async function sendByWorkers(socket) {
+  await generateCoordsByWorker();
+  socket.emit('coordinates', initialCoords);
+}
 
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5000');
@@ -94,7 +104,10 @@ io.on('connection', (socket) => {
   socket.on('fetchCoordinates', () => {
     setInterval(() => {
       // async iterator
-      sendByAsyncIterator(socket);
+      // sendByAsyncIterator(socket);
+
+      //workers
+      sendByWorkers(socket);
 
       // for loop
       // socket.emit('coordinates', generateCoords());
